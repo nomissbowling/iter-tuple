@@ -6,7 +6,7 @@ authors = ["nomissbowling <nomissbowling@yahoo.co.jp>"]
 
 description = "Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame"
 keywords = ["egui", "dataframe", "polars", "plotters", "gui"]
-categories = ["development-tools", "database-interfaces", "data-structures"]
+categories = ["development-tools", "database", "data-structures"]
 license = "MIT"
 
 documentation = "https://docs.rs/iter-tuple/"
@@ -26,6 +26,3 @@ name = "iter_tuple"
 proc-macro2 = "1.0.56"
 quote = "1.0.26"
 syn = { version = "2.0.15", features = ["full", "extra-traits"] }
-
-polars-utils = { version = "=0.25.1" }
-polars = { version = "=0.25.1", features = ["describe", "lazy", "object", "strings", "dtype-full", "dtype-categorical", "list_eval", "rows", "round_series", "rank"] }
