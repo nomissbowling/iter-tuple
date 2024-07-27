@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.1")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -21,6 +21,9 @@ use quote::{quote, ToTokens}; // quote::ToTokens in proc_macro2
 use syn; // syn::{parse_macro_input, ItemFn};
 use std::ops::Deref;
 
+/// tuple_derive
+/// - Utf8, UInt64, Int64, UInt32, Int32, Float64, Float32, Boolean, Binary, ...
+/// - see Enum polars::datatypes::DataType
 #[proc_macro_attribute]
 pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
 //  println!("{:?}", attr);
