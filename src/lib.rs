@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.2")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -40,7 +40,8 @@ pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
       let ast_i = syn::parse_macro_input!(i as Literal);
       cols = quote! {
         #cols
-        to_any!(t.#ast_i, DataType::#dt),
+        // t.#ast_i.into() is not whole implemented in some version of polars
+        to_any!(t.#ast_i, DataType::#dt), // AnyValue::#dt(t.#ast_i)
       };
       n += 1;
     },

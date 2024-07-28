@@ -22,9 +22,9 @@ pub fn main() {
     (1, "b"),
     (2, "c")
   ].into_iter().map(|r|
-    row_schema(RecTpl::into_iter(r).collect())).collect::<Vec<_>>();
-
-  // or can use row_schema(RecTpl::from(r).into_iter().collect())
+    row_schema(RecTpl::into_iter(r).collect())
+    // row_schema(RecTpl::from(r).into_iter().collect()) // same as above
+  ).collect::<Vec<_>>();
 
   let schema = Schema::from(&rows[0]);
   let df = DataFrame::from_rows_iter_and_schema(rows.iter(), &schema);
