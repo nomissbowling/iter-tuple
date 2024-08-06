@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.2")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.1.3")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -12,6 +12,9 @@
 //! - [polars](https://crates.io/crates/polars)
 //! - [polars-utils](https://crates.io/crates/polars-utils)
 //!
+//! # Optional
+//! - [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
+//!
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as PM2TS;
@@ -21,40 +24,190 @@ use quote::{quote, ToTokens}; // quote::ToTokens in proc_macro2
 use syn; // syn::{parse_macro_input, ItemFn};
 use std::ops::Deref;
 
-/// tuple_derive
-/// - Utf8, UInt64, Int64, UInt32, Int32, Float64, Float32, Boolean, Binary, ...
-/// - see Enum polars::datatypes::DataType
-#[proc_macro_attribute]
-pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
-//  println!("{:?}", attr);
-  let ts: PM2TS = attr.into();
-  let mut n = 0usize;
+/// concat ident to pre ast (before parse as syn::Ident)
+/// - a: true: as is, false: to lowercase
+fn pre_ast_ident(pre: &str, id: &Ident, post: &str, a: bool) -> TokenStream {
+//  let ast_id: syn::Ident = syn::parse_quote! { XXX#id }; // unknown prefix
+//  let id: TokenStream = quote! { XXX#id }.into(); // unknown prefix
+  let mut s = id.to_string();
+  if !a { s = s.to_lowercase(); }
+  let str_id = &format!("{}{}{}", pre, s, post);
+  let mut ts: PM2TS = PM2TS::new(); // proc_macro2::TokenStream
+  Ident::new(str_id, Span::call_site()).to_tokens(&mut ts);
+  ts.into()
+}
+
+/// usize to pre ast (before parse as Literal)
+fn pre_ast_usize(n: usize) -> TokenStream {
+  let mut ts: PM2TS = PM2TS::new(); // proc_macro2::TokenStream
+  Literal::usize_unsuffixed(n).to_tokens(&mut ts); // #n is usize_suffixed
+  ts.into()
+}
+
+/// from polars DataType to primitive type (proc_macro2::TokenStream)
+fn ast_dtype(dt: &Ident) -> PM2TS {
+  match dt.to_string().as_str() {
+  "Int64" => quote! { i64 },
+  "Int32" => quote! { i32 },
+  "Int16" => quote! { i16 },
+  "Int8" => quote! { i8 },
+  "UInt64" => quote! { u64 },
+  "UInt32" => quote! { u32 },
+  "UInt16" => quote! { u16 },
+  "UInt8" => quote! { u8 },
+  "Float64" => quote! { f64 }, // Decimal in polars latest
+  "Float32" => quote! { f32 }, // Decimal in polars latest
+  "Utf8" => quote! { &'a str }, // polars version 0.25.1
+  "String" => quote! { &'a str }, // plars latest
+  "Boolean" => quote! { bool },
+  "Binary" => quote! { &'a [u8] }, // must check later
+  "Null" => quote! { bool }, // must check later
+  "Unknown" => quote! { bool }, // must check later
+  _ => quote! { bool } // must check later
+  }
+}
+
+/// from polars DataType to sqlite3 type (tuple of proc_macro2::TokenStream)
+fn ast_dtype_sqlite3(dt: &Ident) -> (PM2TS, PM2TS) {
+  match dt.to_string().as_str() {
+  "Int64" => (quote! { i64 }, quote! {}),
+  "Int32" => (quote! { i64 }, quote! { as i32 }),
+  "Int16" => (quote! { i64 }, quote! { as i16 }),
+  "Int8" => (quote! { i64 }, quote! { as i8 }),
+  "UInt64" => (quote! { i64 }, quote! { as u64 }),
+  "UInt32" => (quote! { i64 }, quote! { as u32 }),
+  "UInt16" => (quote! { i64 }, quote! { as u16 }),
+  "UInt8" => (quote! { i64 }, quote! { as u8 }),
+  "Float64" => (quote! { f64 }, quote! {}), // Decimal in polars latest
+  "Float32" => (quote! { f64 }, quote! { as f32 }), // Decimal in polars latest
+  "Utf8" => (quote! { &'a str }, quote! {}), // polars version 0.25.1
+  "String" => (quote! { &'a str }, quote! {}), // plars latest
+  "Boolean" => (quote! { &'a str }, quote! { == "T" }),
+  "Binary" => (quote! { &'a [u8] }, quote! {}), // must check later
+  "Null" => (quote! { _ }, quote! {}), // must check later
+  "Unknown" => (quote! { _ }, quote! {}), // must check later
+  _ => (quote! { _ }, quote! {}) // must check later
+  }
+}
+
+/// from attr to tuple of sqlite3 cols
+fn sqlite3_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
   let mut cols = quote! {};
-  for tt in ts { // not use .into_iter().enumerate() to count skip Punct ','
+  for tt in attr { // not use .into_iter().enumerate() to count skip Punct ','
     match tt {
     TokenTree::Ident(dt) => { // match only Ident
 //      println!("{}: {:?}", n, dt);
-      let mut ts: PM2TS = PM2TS::new(); // proc_macro2::TokenStream
-      Literal::usize_unsuffixed(n).to_tokens(&mut ts); // #n is usize_suffixed
-      let i: TokenStream = ts.into();
+      let i = pre_ast_usize(*n); // outside of macro call
+      let ast_i = syn::parse_macro_input!(i as Literal);
+      let (t, p) = ast_dtype_sqlite3(&dt);
+      cols = quote! {
+        #cols
+        row.read::<#t, _>(#ast_i) #p,
+      };
+      *n += 1;
+    },
+    _ => {} // skip Punct ',' etc
+    }
+  }
+  quote! { (#cols) }.into()
+}
+
+/// from attr to vec of cols
+fn vec_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
+  let mut cols = quote! {};
+  for tt in attr { // not use .into_iter().enumerate() to count skip Punct ','
+    match tt {
+    TokenTree::Ident(dt) => { // match only Ident
+//      println!("{}: {:?}", n, dt);
+      let i = pre_ast_usize(*n); // outside of macro call
       let ast_i = syn::parse_macro_input!(i as Literal);
       cols = quote! {
         #cols
         // t.#ast_i.into() is not whole implemented in some version of polars
         to_any!(t.#ast_i, DataType::#dt), // AnyValue::#dt(t.#ast_i)
       };
-      n += 1;
+      *n += 1;
     },
     _ => {} // skip Punct ',' etc
     }
   }
-  let ts_cols: TokenStream = quote! { let v = vec![#cols]; }.into();
-  let ast_cols = syn::parse_macro_input!(ts_cols as syn::Stmt);
-//  dbg!(ast_cols.clone());
+  quote! { let v = vec![#cols]; }.into()
+}
 
+/// from attr to from_tuple of member
+fn from_tuple_members(mns: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for (i, n) in mns.iter().enumerate() {
+    let id = pre_ast_ident("", n, "", true);
+    let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
+    let u = pre_ast_usize(i); // outside of macro call
+    let ast_i = syn::parse_macro_input!(u as Literal);
+    members = quote! {
+      #members
+      #ast_id: t.#ast_i,
+    };
+  }
+  members.into() // be TokenStream
+}
+
+/// from attr to to_tuple of member
+fn to_tuple_members(mns: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for n in mns {
+    let id = pre_ast_ident("", n, "", true);
+    let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
+    members = quote! {
+      #members
+      self.#ast_id,
+    };
+  }
+  quote! { (#members) }.into() // be TokenStream
+}
+
+/// from attr to list of member and DataType
+fn list_members(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for (i, n) in mns.iter().enumerate() {
+    let id = pre_ast_ident("", n, "", true);
+    let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
+    let dt = ast_dtype(&dts[i]);
+    members = quote! {
+      #members
+      ///
+      pub #ast_id: #dt,
+    };
+  }
+  members.into() // be TokenStream
+}
+
+/// from attr to tuple of Vec member name and Vec DataType
+fn parse_attr(attr: PM2TS) -> (Vec<Ident>, Vec<Ident>) {
+  let (mut mns, mut dts) = (Vec::<Ident>::new(), Vec::<Ident>::new());
+  let mut i = 0usize;
+  for tt in attr { // not use .into_iter().enumerate() to count skip Punct ','
+    match tt {
+    TokenTree::Group(gp) => { // match only Group
+      for t in gp.stream() {
+        match t {
+        TokenTree::Ident(dt) => { // match only Ident
+//          println!("{}: {:?}", n, dt);
+          if i == 0 { mns.push(dt); } else { dts.push(dt); }
+        },
+        _ => {} // skip Punct ',' etc
+        }
+      }
+      i += 1;
+    },
+    _ => {} // skip Punct ',' etc
+    }
+  }
+  (mns, dts)
+}
+
+/// check type is tuple and elem length (pipeline for TokenStream)
+fn tuple_check(item: TokenStream, n: usize, f: &str) -> TokenStream {
   let ast = syn::parse_macro_input!(item as syn::ItemType);
 //  dbg!(ast.clone());
-
   let ty = &ast.ty; // syn::Type::Tuple (syn::ItemType -> ty: Box<syn::Type>)
 //  println!("{:?}", ty);
   let elem_len = match ty.deref() {
@@ -62,21 +215,140 @@ pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
 //    println!("{:?}", typetuple);
     typetuple.elems.len()
   },
-  _ => { panic!("tuple_derive requires type alias of tuple"); }
+  _ => { panic!("{} requires type alias of tuple", f); }
   };
 //  println!("{}", elem_len);
-  if elem_len != n { panic!("tuple_derive attributes not match with tuple"); }
+  if elem_len != n { panic!("{} attributes not match with tuple", f); }
+  ast.into_token_stream().into()
+}
+
+/// struct_derive
+/// - (optional)
+#[proc_macro_attribute]
+pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
+//  println!("{:?}", attr);
+  let (mns, dts) = parse_attr(attr.into());
+  let (m, n) = (mns.len(), dts.len());
+  if m != n { panic!("struct_derive attributes not same length"); }
+  let ast_list_members: PM2TS = list_members(&mns, &dts).into();
+//  dbg!(ast_list_members.clone());
+  let ast_to_tuple_members: PM2TS = to_tuple_members(&mns).into();
+//  dbg!(ast_to_tuple_members.clone());
+  let ast_from_tuple_members: PM2TS = from_tuple_members(&mns).into();
+//  dbg!(ast_from_tuple_members.clone());
+
+  let tp = tuple_check(item, n, "struct_derive");
+  let ast = syn::parse_macro_input!(tp as syn::ItemType);
 
   let tpl_id = &ast.ident;
 //  println!("{:?}", tpl_id);
+  let st_id = pre_ast_ident("St", tpl_id, "", true); // outside of macro call
+  let ast_st_id = syn::parse_macro_input!(st_id as syn::Ident);
+//  dbg!(ast_st_id.clone());
+  let fnc_id = pre_ast_ident("to_", tpl_id, "", false); // to lowercase
+  let ast_fnc_id = syn::parse_macro_input!(fnc_id as syn::Ident);
+//  dbg!(ast_fnc_id.clone());
+  let rec_id = pre_ast_ident("Rec", tpl_id, "", true); // outside of macro call
+  let ast_rec_id = syn::parse_macro_input!(rec_id as syn::Ident);
+//  dbg!(ast_rec_id.clone());
 
-//  let ast_rec_id: syn::Ident = syn::parse_quote! { Rec#tpl_id }; // uk prefix
-//  let rec_id: TokenStream = quote! { Rec#tpl_id }.into(); // unknown prefix
-  let rec_id = &format!("Rec{}", tpl_id.to_string());
+  quote! {
+#ast
+///
+pub struct #ast_st_id<'a> {
+  #ast_list_members
+}
+///
+impl<'a> #ast_st_id<'a> {
+  ///
+  pub fn to_vec(&self) -> Vec<AnyValue<'_>> {
+    #ast_rec_id::from(self.#ast_fnc_id()).v
+  }
+  ///
+  pub fn #ast_fnc_id(&self) -> #tpl_id<'a> {
+    #ast_to_tuple_members
+  }
+}
+///
+impl<'a> From<#tpl_id<'a>> for #ast_st_id<'a> {
+  ///
+  fn from(t: #tpl_id<'a>) -> #ast_st_id<'a> {
+    #ast_st_id{#ast_from_tuple_members}
+  }
+}
+///
+impl<'a> From<&'a sqlite::Row> for #ast_st_id<'a> {
+  ///
+  fn from(row: &'a sqlite::Row) -> #ast_st_id<'a> {
+    #ast_st_id::from(#ast_fnc_id(row))
+  }
+}
+  }.into()
+/*
+  dbg!(ast.clone());
+  ast.into_token_stream().into()
+*/
+}
 
-  let mut ts: PM2TS = PM2TS::new(); // proc_macro2::TokenStream
-  Ident::new(rec_id, Span::call_site()).to_tokens(&mut ts);
-  let rec_id: TokenStream = ts.into();
+/// tuple_sqlite3
+/// - (optional) see crate sqlite https://crates.io/crates/sqlite
+#[proc_macro_attribute]
+pub fn tuple_sqlite3(attr: TokenStream, item: TokenStream) -> TokenStream {
+//  println!("{:?}", attr);
+  let mut n = 0usize;
+  let ts_cols = sqlite3_cols(attr.into(), &mut n); // outside of macro call
+  let ast_cols = syn::parse_macro_input!(ts_cols as syn::Expr);
+//  dbg!(ast_cols.clone());
+
+  let tp = tuple_check(item, n, "tuple_sqlite3");
+  let ast = syn::parse_macro_input!(tp as syn::ItemType);
+
+  let tpl_id = &ast.ident;
+//  println!("{:?}", tpl_id);
+  let rec_id = pre_ast_ident("Rec", tpl_id, "", true); // outside of macro call
+  let ast_rec_id = syn::parse_macro_input!(rec_id as syn::Ident);
+//  dbg!(ast_rec_id.clone());
+  let fnc_id = pre_ast_ident("to_", tpl_id, "", false); // to lowercase
+  let ast_fnc_id = syn::parse_macro_input!(fnc_id as syn::Ident);
+//  dbg!(ast_fnc_id.clone());
+
+  quote! {
+#ast
+///
+pub fn #ast_fnc_id<'a>(row: &'a sqlite::Row) -> #tpl_id<'a> {
+  #ast_cols
+}
+///
+impl<'a> From<&'a sqlite::Row> for #ast_rec_id<'a> {
+  ///
+  fn from(row: &'a sqlite::Row) -> #ast_rec_id<'a> {
+    #ast_rec_id::from(#ast_fnc_id(row))
+  }
+}
+  }.into()
+/*
+  dbg!(ast.clone());
+  ast.into_token_stream().into()
+*/
+}
+
+/// tuple_derive
+/// - Utf8, UInt64, Int64, UInt32, Int32, Float64, Float32, Boolean, Binary, ...
+/// - see Enum polars::datatypes::DataType
+#[proc_macro_attribute]
+pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
+//  println!("{:?}", attr);
+  let mut n = 0usize;
+  let ts_cols = vec_cols(attr.into(), &mut n); // outside of macro call
+  let ast_cols = syn::parse_macro_input!(ts_cols as syn::Stmt);
+//  dbg!(ast_cols.clone());
+
+  let tp = tuple_check(item, n, "tuple_derive");
+  let ast = syn::parse_macro_input!(tp as syn::ItemType);
+
+  let tpl_id = &ast.ident;
+//  println!("{:?}", tpl_id);
+  let rec_id = pre_ast_ident("Rec", tpl_id, "", true); // outside of macro call
   let ast_rec_id = syn::parse_macro_input!(rec_id as syn::Ident);
 //  dbg!(ast_rec_id.clone());
 

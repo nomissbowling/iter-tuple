@@ -9,9 +9,15 @@ How to use
 
 ```rust
 use iter_tuple::tuple_derive;
+use iter_tuple::tuple_sqlite3; // optional (must use with tuple_derive)
+use iter_tuple::struct_derive; // optional (must use with tuple_sqlite3)
 use polars::prelude::{DataFrame, AnyValue, Schema}; // , Field, DataType
 use egui_dataframe::{row_schema, named_schema, to_any};
 
+/// auto defines struct StTpl and sqlite3 trait with struct_derive (optional)
+#[struct_derive((id, string), (UInt64, Utf8))]
+/// auto defines sqlite3 trait for RecTpl with tuple_sqlite3 (optional)
+#[tuple_sqlite3(UInt64, Utf8)]
 /// auto defines struct RecTpl with tuple_derive
 #[tuple_derive(UInt64, Utf8)]
 pub type Tpl<'a> = (u64, &'a str);
@@ -56,6 +62,12 @@ Requirements
 
 - [https://crates.io/crates/egui-dataframe](https://crates.io/crates/egui-dataframe)
 - [https://github.com/nomissbowling/egui-dataframe](https://github.com/nomissbowling/egui-dataframe)
+
+
+Optional
+--------
+
+- [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
 
 
 Links
