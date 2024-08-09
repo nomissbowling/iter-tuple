@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.1")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -156,14 +156,18 @@ fn vec_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
       let i = pre_ast_usize(*n); // outside of macro call
       let ast_i = syn::parse_macro_input!(i as Literal);
       let v = match dt.to_string().as_str() {
-      // vec_cols through "Boolean"
-      "Binary" => quote! { &t.#ast_i },
-      _ => quote! { t.#ast_i }
+      // vec_cols through "Boolean" => ...
+      // "Binary" => quote! { &t.#ast_i }, // use below (can't use .to_owned())
+      "Binary" => quote! { to_any!(t.#ast_i, DataType::BinaryOwned) },
+      // _ => quote! { t.#ast_i } // skip (use below) for support BinaryOwned
+      _ => quote! { to_any!(t.#ast_i, DataType::#dt) }
       };
       cols = quote! {
         #cols
-        // #v.into() is not whole implemented in some version of polars
-        to_any!(#v, DataType::#dt), // AnyValue::#dt(#v)
+        // #v.into(), // it is not whole implemented in some version of polars
+        // AnyValue::#dt(#v), // same as below
+        // to_any!(#v, DataType::#dt), // skip (use below) for Binary Owned
+        #v,
       };
       *n += 1;
     },
@@ -207,14 +211,19 @@ fn from_tuple_members(mns: &Vec<Ident>) -> TokenStream {
 }
 
 /// from attr to to_tuple of member
-fn to_tuple_members(mns: &Vec<Ident>) -> TokenStream {
+fn to_tuple_members(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
   let mut members = quote! {};
-  for n in mns {
+  for (i, n) in mns.iter().enumerate() {
     let id = pre_ast_ident("", n, "", true);
     let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
+    let v = match dts[i].to_string().as_str() {
+    // to_tuple_members through "Boolean" => ...
+    "Binary" => quote! { self.#ast_id.clone() },
+    _ => quote! { self.#ast_id }
+    };
     members = quote! {
       #members
-      self.#ast_id,
+      #v,
     };
   }
   quote! { (#members) }.into() // be TokenStream
@@ -288,7 +297,7 @@ pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
   if m != n { panic!("struct_derive attributes not same length"); }
   let ast_list_members: PM2TS = list_members(&mns, &dts).into();
 //  dbg!(ast_list_members.clone());
-  let ast_to_tuple_members: PM2TS = to_tuple_members(&mns).into();
+  let ast_to_tuple_members: PM2TS = to_tuple_members(&mns, &dts).into();
 //  dbg!(ast_to_tuple_members.clone());
   let ast_from_tuple_members: PM2TS = from_tuple_members(&mns).into();
 //  dbg!(ast_from_tuple_members.clone());
