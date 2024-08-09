@@ -68,6 +68,7 @@ Optional
 --------
 
 - [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
+- [https://crates.io/crates/polars-sqlite](https://crates.io/crates/polars-sqlite)
 
 
 Links

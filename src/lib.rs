@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.1")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.2")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -14,6 +14,7 @@
 //!
 //! # Optional
 //! - [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
+//! - [https://crates.io/crates/polars-sqlite](https://crates.io/crates/polars-sqlite)
 //!
 
 use proc_macro::TokenStream;
@@ -328,16 +329,22 @@ pub struct #ast_st_id<'a> {
 ///
 impl<'a> #ast_st_id<'a> {
   ///
-  pub fn to_sqlite3_vec(&self) -> Vec<(&str, sqlite::Value)> {
-    #ast_sqlite3_vec
-  }
-  ///
-  pub fn to_vec(&self) -> Vec<AnyValue<'_>> {
-    #ast_rec_id::from(self.#ast_fnc_id()).v
-  }
-  ///
   pub fn #ast_fnc_id(&self) -> #tpl_id<'a> {
     #ast_to_tuple_members
+  }
+}
+///
+impl<'a> ToAnyValueVec for #ast_st_id<'a> {
+  ///
+  fn to_vec(&self) -> Vec<AnyValue<'_>> {
+    #ast_rec_id::from(self.#ast_fnc_id()).v
+  }
+}
+///
+impl<'a> ToSqlite3ValueVec for #ast_st_id<'a> {
+  ///
+  fn to_sqlite3_vec(&self) -> Vec<(&str, sqlite::Value)> {
+    #ast_sqlite3_vec
   }
 }
 ///
