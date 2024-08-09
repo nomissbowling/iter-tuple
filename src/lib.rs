@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.2")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.3")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -329,7 +329,7 @@ pub struct #ast_st_id<'a> {
 ///
 impl<'a> #ast_st_id<'a> {
   ///
-  pub fn #ast_fnc_id(&self) -> #tpl_id<'a> {
+  pub fn #ast_fnc_id(&self) -> #tpl_id<'_> {
     #ast_to_tuple_members
   }
 }
@@ -350,14 +350,14 @@ impl<'a> ToSqlite3ValueVec for #ast_st_id<'a> {
 ///
 impl<'a> From<#tpl_id<'a>> for #ast_st_id<'a> {
   ///
-  fn from(t: #tpl_id<'a>) -> #ast_st_id<'a> {
+  fn from(t: #tpl_id<'a>) -> #ast_st_id<'_> {
     #ast_st_id{#ast_from_tuple_members}
   }
 }
 ///
 impl<'a> From<&'a sqlite::Row> for #ast_st_id<'a> {
   ///
-  fn from(row: &'a sqlite::Row) -> #ast_st_id<'a> {
+  fn from(row: &'a sqlite::Row) -> #ast_st_id<'_> {
     #ast_st_id::from(#ast_fnc_id(row))
   }
 }
@@ -393,13 +393,13 @@ pub fn tuple_sqlite3(attr: TokenStream, item: TokenStream) -> TokenStream {
   quote! {
 #ast
 ///
-pub fn #ast_fnc_id<'a>(row: &'a sqlite::Row) -> #tpl_id<'a> {
+pub fn #ast_fnc_id<'a>(row: &'a sqlite::Row) -> #tpl_id<'_> {
   #ast_cols
 }
 ///
 impl<'a> From<&'a sqlite::Row> for #ast_rec_id<'a> {
   ///
-  fn from(row: &'a sqlite::Row) -> #ast_rec_id<'a> {
+  fn from(row: &'a sqlite::Row) -> #ast_rec_id<'_> {
     #ast_rec_id::from(#ast_fnc_id(row))
   }
 }
@@ -452,7 +452,7 @@ impl<'a> IntoIterator for #ast_rec_id<'a> {
 ///
 impl<'a> From<#tpl_id<'a>> for #ast_rec_id<'a> {
   ///
-  fn from(t: #tpl_id<'a>) -> #ast_rec_id<'a> {
+  fn from(t: #tpl_id<'a>) -> #ast_rec_id<'_> {
     #ast_cols
     #ast_rec_id{v}
   }
@@ -460,7 +460,7 @@ impl<'a> From<#tpl_id<'a>> for #ast_rec_id<'a> {
 ///
 impl<'a> #ast_rec_id<'a> {
   ///
-  pub fn into_iter(t: #tpl_id<'a>) -> std::vec::IntoIter<AnyValue<'a>> {
+  pub fn into_iter(t: #tpl_id<'a>) -> std::vec::IntoIter<AnyValue<'_>> {
     #ast_rec_id::from(t).into_iter()
   }
 }
