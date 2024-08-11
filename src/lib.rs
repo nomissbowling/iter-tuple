@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.3")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.4")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -334,16 +334,17 @@ impl<'a> #ast_st_id<'a> {
   }
 }
 ///
-impl<'a> ToAnyValueVec for #ast_st_id<'a> {
+impl<'a> IntoAnyValueVec<'a> for #ast_st_id<'a> {
   ///
-  fn to_vec(&self) -> Vec<AnyValue<'_>> {
-    #ast_rec_id::from(self.#ast_fnc_id()).v
+  fn into_vec(self) -> Vec<AnyValue<'a>> {
+//    #ast_rec_id::from(self.#ast_fnc_id()).v // can't reference to data owned
+    #ast_rec_id::from(#ast_to_tuple_members).v
   }
 }
 ///
 impl<'a> ToSqlite3ValueVec for #ast_st_id<'a> {
   ///
-  fn to_sqlite3_vec(&self) -> Vec<(&str, sqlite::Value)> {
+  fn to_sqlite3_vec(&self) -> Vec<(&'_ str, sqlite::Value)> {
     #ast_sqlite3_vec
   }
 }
