@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.4")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.5")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -147,6 +147,24 @@ fn sqlite3_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
   quote! { (#cols) }.into()
 }
 
+/// from attr to vec of cols type
+fn type_cols(attr: PM2TS) -> TokenStream {
+  let mut cols = quote! {};
+  for tt in attr { // not use .into_iter().enumerate() to count skip Punct ','
+    match tt {
+    TokenTree::Ident(dt) => { // match only Ident
+//      println!("{:?}", dt);
+      cols = quote! {
+        #cols
+        DataType::#dt,
+      };
+    },
+    _ => {} // skip Punct ',' etc
+    }
+  }
+  quote! { vec![#cols] }.into()
+}
+
 /// from attr to vec of cols
 fn vec_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
   let mut cols = quote! {};
@@ -230,6 +248,32 @@ fn to_tuple_members(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
   quote! { (#members) }.into() // be TokenStream
 }
 
+/// from attr to list of DataType
+fn type_members(dts: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for dt in dts.iter() {
+    members = quote! {
+      #members
+      DataType::#dt,
+    };
+  }
+  quote! { vec![#members] }.into() // be TokenStream
+}
+
+/// from attr to list of member stringify
+fn str_members(mns: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for n in mns.iter() {
+    let id = pre_ast_ident("", n, "", true);
+    let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
+    members = quote! {
+      #members
+      stringify!(#ast_id),
+    };
+  }
+  quote! { vec![#members] }.into() // be TokenStream
+}
+
 /// from attr to list of member and DataType
 fn list_members(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
   let mut members = quote! {};
@@ -296,6 +340,10 @@ pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
   let (mns, dts) = parse_attr(attr.into());
   let (m, n) = (mns.len(), dts.len());
   if m != n { panic!("struct_derive attributes not same length"); }
+  let ast_type_members: PM2TS = type_members(&dts).into();
+//  dbg!(ast_type_members.clone());
+  let ast_str_members: PM2TS = str_members(&mns).into();
+//  dbg!(ast_str_members.clone());
   let ast_list_members: PM2TS = list_members(&mns, &dts).into();
 //  dbg!(ast_list_members.clone());
   let ast_to_tuple_members: PM2TS = to_tuple_members(&mns, &dts).into();
@@ -328,6 +376,14 @@ pub struct #ast_st_id<'a> {
 }
 ///
 impl<'a> #ast_st_id<'a> {
+  ///
+  pub fn members() -> Vec<&'a str> {
+    #ast_str_members
+  }
+  ///
+  pub fn types() -> Vec<DataType> {
+    #ast_type_members
+  }
   ///
   pub fn #ast_fnc_id(&self) -> #tpl_id<'_> {
     #ast_to_tuple_members
@@ -417,6 +473,10 @@ impl<'a> From<&'a sqlite::Row> for #ast_rec_id<'a> {
 #[proc_macro_attribute]
 pub fn tuple_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
 //  println!("{:?}", attr);
+  let type_cols = type_cols(attr.clone().into()); // outside of macro call
+  let ast_type_members = syn::parse_macro_input!(type_cols as syn::Expr);
+//  dbg!(ast_type_members.clone());
+
   let mut n = 0usize;
   let ts_cols = vec_cols(attr.into(), &mut n); // outside of macro call
   let ast_cols = syn::parse_macro_input!(ts_cols as syn::Stmt);
@@ -460,6 +520,10 @@ impl<'a> From<#tpl_id<'a>> for #ast_rec_id<'a> {
 }
 ///
 impl<'a> #ast_rec_id<'a> {
+  ///
+  pub fn types() -> Vec<DataType> {
+    #ast_type_members
+  }
   ///
   pub fn into_iter(t: #tpl_id<'a>) -> std::vec::IntoIter<AnyValue<'_>> {
     #ast_rec_id::from(t).into_iter()
