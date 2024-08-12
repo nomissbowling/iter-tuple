@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.2.5")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.0")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -15,6 +15,7 @@
 //! # Optional
 //! - [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
 //! - [https://crates.io/crates/polars-sqlite](https://crates.io/crates/polars-sqlite)
+//! - [https://crates.io/crates/anyvalue-dataframe](https://crates.io/crates/anyvalue-dataframe)
 //!
 
 use proc_macro::TokenStream;

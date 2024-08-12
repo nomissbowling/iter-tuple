@@ -12,7 +12,7 @@ use iter_tuple::tuple_derive;
 use iter_tuple::tuple_sqlite3; // optional (must use with tuple_derive)
 use iter_tuple::struct_derive; // optional (must use with tuple_sqlite3)
 use polars::prelude::{DataFrame, AnyValue, Schema}; // , Field, DataType
-use egui_dataframe::{row_schema, named_schema, to_any};
+use anyvalue_dataframe::{row_schema, named_schema, to_any};
 
 /// auto defines struct StTpl and sqlite3 trait with struct_derive (optional)
 #[struct_derive((id, string), (UInt64, Utf8))]
@@ -60,15 +60,13 @@ Requirements
 - [polars](https://crates.io/crates/polars)
 - [polars-utils](https://crates.io/crates/polars-utils)
 
-- [https://crates.io/crates/egui-dataframe](https://crates.io/crates/egui-dataframe)
-- [https://github.com/nomissbowling/egui-dataframe](https://github.com/nomissbowling/egui-dataframe)
-
 
 Optional
 --------
 
 - [https://crates.io/crates/sqlite](https://crates.io/crates/sqlite)
 - [https://crates.io/crates/polars-sqlite](https://crates.io/crates/polars-sqlite)
+- [https://crates.io/crates/anyvalue-dataframe](https://crates.io/crates/anyvalue-dataframe)
 
 
 Links
