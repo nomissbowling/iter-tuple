@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.4")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -41,7 +41,7 @@ fn pre_ast_ident(pre: &str, id: &Ident, post: &str, a: bool) -> TokenStream {
 
 /// concat string literal to pre ast (before prepare as Literal)
 /// - a: true: as is, false: to lowercase
-fn pre_ast_literal(pre: &str, id: &Ident, post: &str, a: bool) -> TokenStream {
+fn pre_ast_string(pre: &str, id: &Ident, post: &str, a: bool) -> TokenStream {
   let mut s = id.to_string();
   if !a { s = s.to_lowercase(); }
   let str_id = &format!("{}{}{}", pre, s, post);
@@ -201,14 +201,14 @@ fn vec_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
 fn sqlite3_vec(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
   let mut members = quote! {};
   for (i, n) in mns.iter().enumerate() {
-    let tag = pre_ast_literal(":", n, "", true);
+    let tag = pre_ast_string(":", n, "", true);
     let ast_tag = syn::parse_macro_input!(tag as Literal); // be TokenStream
     let id = pre_ast_ident("", n, "", true);
     let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
     let v = ast_dtype_sqlite3_vec(&dts[i], &ast_id);
     members = quote! {
       #members
-      (stringify!(#ast_tag), #v.into()),
+      (#ast_tag, #v.into()),
     }
   }
   quote! { vec![#members] }.into() // be TokenStream
