@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.4")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.5")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -80,8 +80,41 @@ fn ast_dtype(dt: &Ident) -> PM2TS {
   }
 }
 
+/// from polars DataType to primitive value (proc_macro2::TokenStream)
+fn ast_dtype_from_anyvalue_col(dt: &Ident, n: &Literal) -> PM2TS {
+  match dt.to_string().as_str() {
+  "Int64" => quote! { match v[#n] {AnyValue::Int64(i) => i, _ => 0} },
+  "Int32" => quote! { match v[#n] {AnyValue::Int32(i) => i, _ => 0} },
+  "Int16" => quote! { match v[#n] {AnyValue::Int16(i) => i, _ => 0} },
+  "Int8" => quote! { match v[#n] {AnyValue::Int8(i) => i, _ => 0} },
+  "UInt64" => quote! { match v[#n] {AnyValue::UInt64(u) => u, _ => 0} },
+  "UInt32" => quote! { match v[#n] {AnyValue::UInt32(u) => u, _ => 0} },
+  "UInt16" => quote! { match v[#n] {AnyValue::UInt16(u) => u, _ => 0} },
+  "UInt8" => quote! { match v[#n] {AnyValue::UInt8(u) => u, _ => 0} },
+  "Float64" => quote! { match v[#n] {AnyValue::Float64(f) => f, _ => 0.0} },
+  "Float32" => quote! { match v[#n] {AnyValue::Float32(f) => f, _ => 0.0} },
+  "Utf8" => quote! { match v[#n] {
+    AnyValue::Utf8(s) => s, // polars 0.25.1
+    _ => ""
+  } },
+  "String" => quote! { match v[#n] {
+    AnyValue::String(s) => s, // polars latest
+    _ => "".to_string()
+  } },
+  "Boolean" => quote! { match v[#n] {AnyValue::Boolean(b) => b, _ => false} },
+  "Binary" => quote! { match &v[#n] { // must match with reference
+    AnyValue::BinaryOwned(u) => u.clone(),
+    AnyValue::Binary(u) => u.to_vec(),
+    _ => vec![]
+  } },
+  "Null" => quote! { match v[#n] { _ => 0} }, // must check later
+  "Unknown" => quote! { match v[#n] { _ => 0} }, // must check later
+  _ => quote! { match v[#n] { _ => 0} } // must check later
+  }
+}
+
 /// from polars DataType to sqlite3 type WR (proc_macro2::TokenStream)
-fn ast_dtype_sqlite3_vec(dt: &Ident, ast_id: &Ident) -> PM2TS {
+fn ast_dtype_to_sqlite3_vec(dt: &Ident, ast_id: &Ident) -> PM2TS {
   match dt.to_string().as_str() {
   "Int64" => quote! { self.#ast_id },
   "Int32" => quote! { (self.#ast_id as i64) },
@@ -198,20 +231,35 @@ fn vec_cols(attr: PM2TS, n: &mut usize) -> TokenStream {
 }
 
 /// from attr to sqlite3 vec of member tuple
-fn sqlite3_vec(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
+fn to_sqlite3_vec(mns: &Vec<Ident>, dts: &Vec<Ident>) -> TokenStream {
   let mut members = quote! {};
   for (i, n) in mns.iter().enumerate() {
     let tag = pre_ast_string(":", n, "", true);
     let ast_tag = syn::parse_macro_input!(tag as Literal); // be TokenStream
     let id = pre_ast_ident("", n, "", true);
     let ast_id = syn::parse_macro_input!(id as syn::Ident); // be TokenStream
-    let v = ast_dtype_sqlite3_vec(&dts[i], &ast_id);
+    let v = ast_dtype_to_sqlite3_vec(&dts[i], &ast_id);
     members = quote! {
       #members
       (#ast_tag, #v.into()),
     }
   }
   quote! { vec![#members] }.into() // be TokenStream
+}
+
+/// from attr to list of value
+fn from_anyvalue_col(dts: &Vec<Ident>) -> TokenStream {
+  let mut members = quote! {};
+  for (i, dt) in dts.iter().enumerate() {
+    let u = pre_ast_usize(i); // outside of macro call
+    let ast_i = syn::parse_macro_input!(u as Literal);
+    let v = ast_dtype_from_anyvalue_col(dt, &ast_i);
+    members = quote! {
+      #members
+      #v,
+    };
+  }
+  quote! { (#members) }.into() // be TokenStream
 }
 
 /// from attr to from_tuple of member
@@ -351,8 +399,10 @@ pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
 //  dbg!(ast_to_tuple_members.clone());
   let ast_from_tuple_members: PM2TS = from_tuple_members(&mns).into();
 //  dbg!(ast_from_tuple_members.clone());
-  let ast_sqlite3_vec: PM2TS = sqlite3_vec(&mns, &dts).into();
-//  dbg!(ast_sqlite3_vec.clone());
+  let ast_to_sqlite3_vec: PM2TS = to_sqlite3_vec(&mns, &dts).into();
+//  dbg!(ast_to_sqlite3_vec.clone());
+  let ast_from_anyvalue_col: PM2TS = from_anyvalue_col(&dts).into();
+//  dbg!(ast_from_anyvalue_col.clone());
 
   let tp = tuple_check(item, n, "struct_derive");
   let ast = syn::parse_macro_input!(tp as syn::ItemType);
@@ -368,6 +418,11 @@ pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
   let rec_id = pre_ast_ident("Rec", tpl_id, "", true); // outside of macro call
   let ast_rec_id = syn::parse_macro_input!(rec_id as syn::Ident);
 //  dbg!(ast_rec_id.clone());
+
+  // to define st_id_from instead of trait From st_id::from
+  let st_id_from = pre_ast_ident("", &ast_st_id, "_from", false);
+  let ast_st_id_from = syn::parse_macro_input!(st_id_from as syn::Ident);
+//  dbg!(ast_st_id_from.clone());
 
   quote! {
 #ast
@@ -402,7 +457,7 @@ impl<'a> IntoAnyValueVec<'a> for #ast_st_id<'a> {
 impl<'a> ToSqlite3ValueVec for #ast_st_id<'a> {
   ///
   fn to_sqlite3_vec(&self) -> Vec<(&'_ str, sqlite::Value)> {
-    #ast_sqlite3_vec
+    #ast_to_sqlite3_vec
   }
 }
 ///
@@ -418,6 +473,21 @@ impl<'a> From<&'a sqlite::Row> for #ast_st_id<'a> {
   fn from(row: &'a sqlite::Row) -> #ast_st_id<'_> {
     #ast_st_id::from(#ast_fnc_id(row))
   }
+}
+/*
+// parenthetical notation is only stable when used with `Fn`-family traits
+// associated type bindings are not allowed here
+///
+impl<'a> From(&'a Vec<AnyValue<'a>>) for #ast_st_id<'a> {
+  ///
+  fn from(v: &'a Vec<AnyValue<'a>>) -> #ast_st_id<'_> {
+    #ast_st_id::from(#ast_from_anyvalue_col)
+  }
+}
+*/
+///
+fn #ast_st_id_from<'a>(v: &'a Vec<AnyValue<'a>>) -> #ast_st_id<'_> {
+  #ast_st_id::from(#ast_from_anyvalue_col)
 }
   }.into()
 /*
