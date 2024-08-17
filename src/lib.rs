@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.5")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.7")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -419,11 +419,6 @@ pub fn struct_derive(attr: TokenStream, item: TokenStream) -> TokenStream {
   let ast_rec_id = syn::parse_macro_input!(rec_id as syn::Ident);
 //  dbg!(ast_rec_id.clone());
 
-  // to define st_id_from instead of trait From st_id::from
-  let st_id_from = pre_ast_ident("", &ast_st_id, "_from", false);
-  let ast_st_id_from = syn::parse_macro_input!(st_id_from as syn::Ident);
-//  dbg!(ast_st_id_from.clone());
-
   quote! {
 #ast
 ///
@@ -474,20 +469,12 @@ impl<'a> From<&'a sqlite::Row> for #ast_st_id<'a> {
     #ast_st_id::from(#ast_fnc_id(row))
   }
 }
-/*
-// parenthetical notation is only stable when used with `Fn`-family traits
-// associated type bindings are not allowed here
 ///
-impl<'a> From(&'a Vec<AnyValue<'a>>) for #ast_st_id<'a> {
+impl<'a> From<&'a Vec<AnyValue<'a>>> for #ast_st_id<'a> {
   ///
   fn from(v: &'a Vec<AnyValue<'a>>) -> #ast_st_id<'_> {
     #ast_st_id::from(#ast_from_anyvalue_col)
   }
-}
-*/
-///
-fn #ast_st_id_from<'a>(v: &'a Vec<AnyValue<'a>>) -> #ast_st_id<'_> {
-  #ast_st_id::from(#ast_from_anyvalue_col)
 }
   }.into()
 /*
