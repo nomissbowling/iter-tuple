@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.7")]
+#![doc(html_root_url = "https://docs.rs/iter-tuple/0.3.8")]
 //! Rust iterator for tuple through proc-macro2 struct Vec AnyValue of polars DataFrame
 //!
 //! # Sample
@@ -82,6 +82,7 @@ fn ast_dtype(dt: &Ident) -> PM2TS {
 
 /// from polars DataType to primitive value (proc_macro2::TokenStream)
 fn ast_dtype_from_anyvalue_col(dt: &Ident, n: &Literal) -> PM2TS {
+/*
   match dt.to_string().as_str() {
   "Int64" => quote! { match v[#n] {AnyValue::Int64(i) => i, _ => 0} },
   "Int32" => quote! { match v[#n] {AnyValue::Int32(i) => i, _ => 0} },
@@ -111,6 +112,8 @@ fn ast_dtype_from_anyvalue_col(dt: &Ident, n: &Literal) -> PM2TS {
   "Unknown" => quote! { match v[#n] { _ => 0} }, // must check later
   _ => quote! { match v[#n] { _ => 0} } // must check later
   }
+*/
+  quote! { from_any!(v[#n], DataType::#dt) }
 }
 
 /// from polars DataType to sqlite3 type WR (proc_macro2::TokenStream)
